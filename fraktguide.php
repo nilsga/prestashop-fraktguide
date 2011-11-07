@@ -119,10 +119,8 @@ class FraktGuide extends CarrierModule {
         if($carrier->add()) {
 	    $carriers_str = Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS');
 	    $carriers = $carriers_str ? explode(';', Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS')) : array();
-	    echo "BEFORE";
 	    print_r($carriers);
 	    $carriers[] = $carrier->id;
-	    echo "AFTER";
 	    print_r($carriers);
 	    Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', implode(';', $carriers));
             $zones = Zone::getZones(true);
@@ -161,14 +159,12 @@ class FraktGuide extends CarrierModule {
 		$ids = array();
 		foreach($carriers_by_name as $carrier_name => $carrier_id) {
 			if(in_array($carrier_name, $selected_products)) {
-				echo "IN SELECTION ".$carrier_id;
 				// Set active
 				$update_values = array('id_carrier' => (int)$carrier_id, 'active' => true);
 				Db::getInstance()->autoExecute(_DB_PREFIX_.'carrier', $update_values, 'UPDATE', '`id_carrier` = '.(int)$carrier_id);
 				$ids[] = $carrier_id;
 			}
 			else {
-				echo "NOT IN SELECTION";
 				// Set disabled
 				$update_values = array('active' => false);
 				Db::getInstance()->autoExecute(_DB_PREFIX_.'carrier', $update_values, 'UPDATE', '`id_carrier` = '.(int)$carrier_id);
