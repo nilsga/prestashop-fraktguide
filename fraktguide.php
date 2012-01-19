@@ -25,7 +25,7 @@ class FraktGuide extends CarrierModule {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
         $this->version = '0.1';
-   	$this->author = 'Hegvik Consulting';   
+   	$this->author = 'Nils-Helge Garli Hegvik';   
    	parent::__construct();
    
   	$this->displayName = $this->l('Bring Fraktguide');
@@ -33,7 +33,9 @@ class FraktGuide extends CarrierModule {
    }
 
     public function install() {
-    	parent::install();
+    	if(!parent::install()) {
+	  return false;
+	}
     	if(!$this->registerHook('extraCarrier') || !$this->registerHook('processCarrier') || !$this->registerHook('beforeCarrier')) {
       		return false;
     	}
@@ -119,9 +121,7 @@ class FraktGuide extends CarrierModule {
         if($carrier->add()) {
 	    $carriers_str = Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS');
 	    $carriers = $carriers_str ? explode(';', Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS')) : array();
-	    print_r($carriers);
 	    $carriers[] = $carrier->id;
-	    print_r($carriers);
 	    Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', implode(';', $carriers));
             $zones = Zone::getZones(true);
             foreach($zones as $zone) {
@@ -154,8 +154,6 @@ class FraktGuide extends CarrierModule {
 
 	private function updateSelectedCarriers($selected_products) {
 		$carriers_by_name = $this->getCarriersByName();
-		print_r($carriers_by_name);
-		print_r($selected_products);
 		$ids = array();
 		foreach($carriers_by_name as $carrier_name => $carrier_id) {
 			if(in_array($carrier_name, $selected_products)) {
