@@ -306,6 +306,25 @@ class FraktGuide extends CarrierModule {
     public function hookProcessCarrier($params) {
         $cart = $params["cart"];
         $cust_id = $cart->id_customer;
+        $shipping_cost = $this->getShippingCost($cart);
+	$update_values = array("id_cart" => (int)$cart->id, "id_customer" => (int)$cust_id, "shipping_cost" => floatval($shipping_cost));
+	$row = Db::getInstance()->getRow('SELECT * FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cust_id);
+	$op = '';
+	if($row) {
+	     $op = "UPDATE";
+        }
+	else {
+	     $op = "INSERT";
+	}
+        Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, $op);
+	
+    }
+	
+    public function hookBeforeCarrier() {
+	return '';
+    }
+
+    public function getShippingCost($cart) {
         $carrier = $cart->id_carrier;
         $address = new Address((int)$cart->id_address_delivery);
         $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
@@ -326,21 +345,7 @@ class FraktGuide extends CarrierModule {
                 $forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
                 $shipping_cost += $forsikring;
         }
-	$update_values = array("id_cart" => (int)$cart->id, "id_customer" => (int)$cust_id, "shipping_cost" => floatval($shipping_cost));
-	$row = Db::getInstance()->getRow('SELECT * FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cust_id);
-	$op = '';
-	if($row) {
-	     $op = "UPDATE";
-        }
-	else {
-	     $op = "INSERT";
-	}
-        Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, $op);
-	
-    }
-	
-    public function hookBeforeCarrier() {
-	return '';
+	return $shipping_cost;
     }
 
     public function getOrderShippingCost($params, $shipping_cost) {
@@ -348,8 +353,11 @@ class FraktGuide extends CarrierModule {
     }
 
     public function getOrderShippingCostExternal($cart) {
-	return Db::getInstance()->getValue('SELECT shipping_cost FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cart->id_customer);
+	$shipping_cost = Db::getInstance()->getValue('SELECT shipping_cost FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cart->id_customer);
+	if(!$shipping_cost) $shipping_cost = $this->getShippingCost($cart);
+	return $shipping_cost;
     }
 }
 
 ?>
+
