@@ -265,7 +265,7 @@ class FraktGuide extends CarrierModule {
         $postcode = $address->postcode;
         $edi = Configuration::get('FRAKTGUIDE_EDI');
 	$cart = $params['cart'];
-        $cart_weight = ($cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 6000);
+        $cart_weight = ($cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000);
         $url = "http://fraktguide.bring.no/fraktguide/products/all.json?from=".Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER')."&to=$postcode&weightInGrams=$cart_weight&edi=".($edi ? 'true' : 'false');
 	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
 	$selected_products = $products_str ? explode(';', Configuration::get('FRAKTGUIDE_PRODUCTS')) : array();
