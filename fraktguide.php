@@ -141,6 +141,7 @@ class FraktGuide extends CarrierModule {
 	  $forsikring = Tools::getIsset('fraktguide_forsikring');
 	  $frapostnr = Tools::getValue('fraktguide_fra_postnummer');
 	  $selected_products = Tools::getIsset('fraktguide_product') ? Tools::getValue('fraktguide_product') : array();
+          $max_price = Tools::getValue('fraktguide_a_post_max_pris');
           Configuration::updateValue('FRAKTGUIDE_EDI', $edi);
 	  Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
 	  Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
