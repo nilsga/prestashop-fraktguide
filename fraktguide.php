@@ -301,8 +301,8 @@ class FraktGuide extends CarrierModule {
                 	$forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
 	                $price += $forsikring;
         	    }
-	    }
-	    $html .= "<tr class='item'>\n<td class='carrier_action radio'><input type='radio' name='id_carrier' id='$productId' value='$carrier_id'".($opc ? ' onclick="updateCarrierSelectionAndGift();"' : '')."></td><td class='carrier_name'><label for='$productId'>$productName</label></td><td class='carrier_infos'>$productText</td><td class='carrier_price'><span class='price'>$price kr</span></td></tr></tr>";
+	    	    $html .= "<tr class='item'>\n<td class='carrier_action radio'><input type='radio' name='id_carrier' id='$productId' value='$carrier_id'".($opc ? ' onclick="updateCarrierSelectionAndGift();"' : '')."></td><td class='carrier_name'><label for='$productId'>$productName</label></td><td class='carrier_infos'>$productText</td><td class='carrier_price'><span class='price'>$price kr</span></td></tr></tr>";
+	   }
         }
         return "<tr>$html</tr>";
     }
