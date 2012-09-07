@@ -56,6 +56,7 @@ class FraktGuide extends CarrierModule {
 	Configuration::updateValue('FRAKTGUIDE_CARRIER_IDS', '');
 	Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', '');
 	Configuration::updateValue('FRAKTGUIDE_PRODUCTS', 'SERVICEPAKKE');
+	Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', null);
 	return true;
     }
 
@@ -144,6 +145,7 @@ class FraktGuide extends CarrierModule {
 	  Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
 	  Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
 	  Configuration::updateValue('FRAKTGUIDE_PRODUCTS', implode(';', $selected_products));
+          Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
 	  $this->createCarriers($selected_products);
 	  $this->updateSelectedCarriers($selected_products);
        }
@@ -252,7 +254,10 @@ class FraktGuide extends CarrierModule {
 	     <div style="clear: both";>
 		<span><label for="fraktguide_fra_postnummer">'.$this->l('Fra postnummer').'</label></span><span><input type="text" id="fraktguide_fra_postnummer" name="fraktguide_fra_postnummer" value="'.$frapostnr.'"></span>
 	     </div>
-		<div style="clear: both; ">
+	     <div style="clear: both";>
+                <span><label for="fraktguide_a_post_max_pris">'.$this->l('Maks ordrepris for A-post').'</label></span><input type="text" id="fraktguide_a_post_max_pris" name="fraktguide_a_post_max_pris" value="'.$max_price.'"></span>
+             </div>
+	     <div style="clear: both; ">
          	<input type="submit" name="submit" value="'.$this->l('Oppdater').'">
         	</div>  
 	 </form>
@@ -276,6 +281,8 @@ class FraktGuide extends CarrierModule {
         $products = $products_json["Product"];
         $html = '';
 	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
+	$max_price_a_post = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRIS');
+        $order_total = $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS_WITHOUT_SHIPPING);
         // The format of the json is different if there are one or if there are more products
         if(count($products) > 0 && !is_array($products[0])) {
             $products = array($products);
@@ -283,15 +290,16 @@ class FraktGuide extends CarrierModule {
 	$carriers_by_name = $this->getCarriersByName();
         foreach($products as $product) {
             $productId = $product["ProductId"];
-       	    $productName = $product["GuiInformation"]["ProductName"];
-            $productText = $product["GuiInformation"]["DisplayName"];
-            $carrier_id = $carriers_by_name[$productId];
-            $price = $product["Price"]["PackagePriceWithoutAdditionalServices"]["AmountWithVAT"];
-            if($forsikring) {
-                $order_total = $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS_WITHOUT_SHIPPING);
-                $forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
-                $price += $forsikring;
-            }
+	    if("A-POST" != $productId || ("A-POST" === $productId && $order_total <= $max_price_a_post)) {
+	       	    $productName = $product["GuiInformation"]["ProductName"];
+        	    $productText = $product["GuiInformation"]["DisplayName"];
+	            $carrier_id = $carriers_by_name[$productId];
+        	    $price = $product["Price"]["PackagePriceWithoutAdditionalServices"]["AmountWithVAT"];
+	            if($forsikring) {
+                	$forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
+	                $price += $forsikring;
+        	    }
+	    }
 	    $html .= "<tr class='item'>\n<td class='carrier_action radio'><input type='radio' name='id_carrier' id='$productId' value='$carrier_id'".($opc ? ' onclick="updateCarrierSelectionAndGift();"' : '')."></td><td class='carrier_name'><label for='$productId'>$productName</label></td><td class='carrier_infos'>$productText</td><td class='carrier_price'><span class='price'>$price kr</span></td></tr></tr>";
         }
         return "<tr>$html</tr>";
