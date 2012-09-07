@@ -216,6 +216,7 @@ class FraktGuide extends CarrierModule {
 	$frapostnr = Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER');
 	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
 	$selected_products = $products_str ? explode(';', $products_str) : array();
+	$max_price = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRICE');
 	$this->_html .= '<style>
 		.fraktguide_product {
 			clear: both;
