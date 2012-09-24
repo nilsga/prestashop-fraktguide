@@ -315,15 +315,17 @@ class FraktGuide extends CarrierModule {
 
     public function hookProcessCarrier($params) {
         $cart = $params["cart"];
-        $cust_id = $cart->id_customer;
-        $shipping_cost = $this->getShippingCost($cart);
-	$update_values = array("id_cart" => (int)$cart->id, "id_customer" => (int)$cust_id, "shipping_cost" => floatval($shipping_cost));
-	$row = Db::getInstance()->getRow('SELECT * FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cust_id);
-	if($row) {
-             Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'UPDATE', 'id_cart = ' . (int)$cart->id);
-        }
-        else {
-             $res = Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, $op);
+	if(in_array($cart->id_carrier, split(";", Configuration::get('FRAKTGUIDE_CARRIER_IDS')))) {
+                $cust_id = $cart->id_customer;
+                $shipping_cost = $this->getShippingCost($cart);
+                $update_values = array("id_cart" => (int)$cart->id, "id_customer" => (int)$cust_id, "shipping_cost" => floatval($shipping_cost));
+                $row = Db::getInstance()->getRow('SELECT * FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cust_id);
+                if($row) {
+                        Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'UPDATE', 'id_cart = ' . (int)$cart->id);
+                }
+                else {
+                        $res = Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, $op);
+                }
         }
     }
 	
