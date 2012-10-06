@@ -6,7 +6,7 @@ class FraktGuide extends CarrierModule {
     private $_carrier_config = array(
 		'name' => 'Bring',
                 'id_tax_rules_group' => 0,
-                'url' => 'http://sporing.posten.no/q=@',
+                'url' => 'http://sporing.bring.no/sporing.html?q=@',
                 'active' => true,
                 'deleted' => 0,
 		'shipping_handling' => false,
