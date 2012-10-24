@@ -324,7 +324,7 @@ class FraktGuide extends CarrierModule {
                         Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'UPDATE', 'id_cart = ' . (int)$cart->id);
                 }
                 else {
-                        $res = Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, $op);
+                        $res = Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'INSERT');
                 }
         }
     }
