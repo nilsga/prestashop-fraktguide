@@ -12,3 +12,6 @@ Modulen er nå installert.
 
 Modulen ligger under "Frakt & Logistikk" (Shipping & Logistics). Trykk på "konfigurer" for å konfigurere hvilke produkter du vil vise.
 
+## TILPASNINGER
+
+Har du behov utover det som er dekket i modulen pr i dag, ta kontakt med nilsga@gmail.com.
