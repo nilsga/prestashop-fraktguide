@@ -1,4 +1,4 @@
-Støtt utviklingen av fraktguiden. Gjør en [donasjon]: http://www.pledgie.com/campaigns/19574
+Støtt utviklingen av fraktguiden. Gjør en [donasjon](http://www.pledgie.com/campaigns/19574)
 
 INSTALLASJON
 ============
