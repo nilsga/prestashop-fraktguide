@@ -146,6 +146,9 @@ class FraktGuide extends CarrierModule {
             $rangeWeight->delimiter1 = '0';
             $rangeWeight->delimiter2 = '10000';
             $rangeWeight->add();
+
+	    if (!copy(dirname(__FILE__) . '/img/logo.png', _PS_SHIP_IMG_DIR_ . '/' . $carrier->id . '.jpg'))
+                return false;
 	
             return true;
         }
