@@ -5,7 +5,6 @@ class FraktGuide extends CarrierModule {
 
     private $_carrier_config = array(
 		'name' => 'Bring',
-                'id_tax_rules_group' => 0,
                 'url' => 'http://sporing.bring.no/sporing.html?q=@',
                 'active' => true,
                 'deleted' => 0,
@@ -16,15 +15,17 @@ class FraktGuide extends CarrierModule {
 		'delay' => array('no' => 'Avhengig av postnummer', 'en' => 'Depdens on postal code'),
                 'shipping_external' => true,
 		'external_module_name' => 'fraktguide',
-		'need_range' => false
+		'need_range' => true
     );
 
     private $_products;
 
+    public $id_carrier;
+
     function __construct() {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
-        $this->version = '0.9';
+        $this->version = '0.10';
         $this->author = 'Nils-Helge Garli Hegvik';
         parent::__construct();
 
@@ -128,6 +129,24 @@ class FraktGuide extends CarrierModule {
             foreach($zones as $zone) {
 		Db::getInstance()->Execute('INSERT INTO '._DB_PREFIX_.'carrier_zone VALUE(\''.(int)($carrier->id).'\', \''.(int)($zone['id_zone']).'\')');
 	    }
+
+	    $groups = Group::getgroups(true);
+
+            foreach ($groups as $group)
+                Db::getInstance()->execute('INSERT INTO ' . _DB_PREFIX_ . 'carrier_group VALUE (\'' . (int) ($carrier->id) . '\',\'' . (int) ($group['id_group']) . '\')');
+
+            $rangePrice = new RangePrice();
+            $rangePrice->id_carrier = $carrier->id;
+            $rangePrice->delimiter1 = '0';
+            $rangePrice->delimiter2 = '10000';
+            $rangePrice->add();
+
+            $rangeWeight = new RangeWeight();
+            $rangeWeight->id_carrier = $carrier->id;
+            $rangeWeight->delimiter1 = '0';
+            $rangeWeight->delimiter2 = '10000';
+            $rangeWeight->add();
+	
             return true;
         }
         else {
@@ -268,47 +287,6 @@ class FraktGuide extends CarrierModule {
         ';
     }
 
-    public function hookExtraCarrier($params) {
-        $opc = Configuration::get("PS_ORDER_PROCESS_TYPE");
-	$address = $params['address'];
-        $postcode = $address->postcode;
-        $edi = Configuration::get('FRAKTGUIDE_EDI');
-	$cart = $params['cart'];
-        $cart_weight = ($cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000);
-        $url = "http://fraktguide.bring.no/fraktguide/products/all.json?from=".Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER')."&to=$postcode&weightInGrams=$cart_weight&edi=".($edi ? 'true' : 'false');
-	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
-	$selected_products = $products_str ? explode(';', Configuration::get('FRAKTGUIDE_PRODUCTS')) : array();
-	foreach($selected_products as $selected_product) {
-		$url .= '&product='.$selected_product;
-	}
-        $products_json = $this->getJson($url);
-        $products = $products_json["Product"];
-        $html = '';
-	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
-	$max_price_a_post = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRIS');
-        $order_total = $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS_WITHOUT_SHIPPING);
-        // The format of the json is different if there are one or if there are more products
-        if(count($products) > 0 && !is_array($products[0])) {
-            $products = array($products);
-        }
-	$carriers_by_name = $this->getCarriersByName();
-        foreach($products as $product) {
-            $productId = $product["ProductId"];
-	    if("A-POST" != $productId || ("A-POST" === $productId && $order_total <= $max_price_a_post)) {
-	       	    $productName = $product["GuiInformation"]["ProductName"];
-        	    $productText = $product["GuiInformation"]["DisplayName"];
-	            $carrier_id = $carriers_by_name[$productId];
-        	    $price = $product["Price"]["PackagePriceWithoutAdditionalServices"]["AmountWithVAT"];
-	            if($forsikring) {
-                	$forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
-	                $price += $forsikring;
-        	    }
-	    	    $html .= "<tr class='item'>\n<td class='carrier_action radio'><input type='radio' name='id_carrier' id='$productId' value='$carrier_id'".($opc ? ' onclick="updateCarrierSelectionAndGift();"' : '')."></td><td class='carrier_name'><label for='$productId'>$productName</label></td><td class='carrier_infos'>$productText</td><td class='carrier_price'><span class='price'>$price kr</span></td></tr></tr>";
-	   }
-        }
-        return "<tr>$html</tr>";
-    }
-
 	private function getProductForCarrier($carrier_id) {
 		$sql = "SELECT name FROM `"._DB_PREFIX_."carrier` WHERE `id_carrier` = ".$carrier_id;
 		$result = Db::getInstance()->ExecuteS($sql);
@@ -326,7 +304,7 @@ class FraktGuide extends CarrierModule {
                         Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'UPDATE', 'id_cart = ' . (int)$cart->id);
                 }
                 else {
-                        $res = Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'INSERT');
+                       Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'INSERT');
                 }
         }
     }
@@ -336,10 +314,9 @@ class FraktGuide extends CarrierModule {
     }
 
     public function getShippingCost($cart) {
-        $carrier = $cart->id_carrier;
         $address = new Address((int)$cart->id_address_delivery);
         $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
-        $product_id = $this->getProductForCarrier($carrier);
+        $product_id = $this->getProductForCarrier($this->id_carrier);
 	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
 	$url = "http://fraktguide.bring.no/fraktguide/products/$product_id/price.json?from=".Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER')."&to=$address->postcode&weightInGrams=$weight&edi=".(Configuration::get('FRAKTGUIDE_EDI') ? 'true' : 'false');
 	$http = curl_init();
@@ -351,16 +328,20 @@ class FraktGuide extends CarrierModule {
         $status = curl_getinfo($http, CURLINFO_HTTP_CODE);
         curl_close($http);
         $shipping_cost = $json_obj["Product"]["Price"]["PackagePriceWithoutAdditionalServices"]["AmountWithVAT"];
-	if($forsikring) {
+	if($shipping_cost) {
+	    if($forsikring) {
                 $order_total = $cart->getOrderTotal(false, Cart::ONLY_PRODUCTS_WITHOUT_SHIPPING);
                 $forsikring = ($order_total * 0.003 < 30 ? 30 : ($order_total > 25000 ? 25000 * 0.003 : $order_total * 0.003));
                 $shipping_cost += $forsikring;
+            }
+	    return $shipping_cost;
         }
-	return $shipping_cost;
+        else
+            return false; // Indicates that carrier is not available due to size/weight restrictions
     }
 
     public function getOrderShippingCost($params, $shipping_cost) {
-	return $shipping_cost;
+	return $this->getShippingCost($params); 
     }
 
     public function getOrderShippingCostExternal($cart) {
