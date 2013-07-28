@@ -69,16 +69,25 @@ class FraktGuide extends CarrierModule {
                                   PRIMARY KEY  (`id_cart`,`id_customer`)
                                 ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
                 
-                if (!Db::getInstance()->Execute($sql)) {
-                        return false;
-		}
-		else {
-			return true;
-		}
+        if (!Db::getInstance()->Execute($sql)) {
+            return false;
+	}
+	else {
+	    $sql = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'fraktguide_product_names` (
+				`id_carrier` varchar(255) NOT NULL,
+				`product_id` varchar(255) NOT NULL,
+				PRIMARY KEY (`id_carrier`)
+		   ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
+	    if(!Db::getInstance()->Execute($sql)) {
+		return false;
+	    }
+	}
+	return true;
     }
 
     public function uninstall() {
 	if(!parent::uninstall() OR !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'fraktguide_cart_cache`')
+		OR !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'fraktguide_product_names`')
 		OR !$this->unregisterHook('extraCarrier')
  		OR !$this->unregisterHook('processCarrier')) {
 		return false;
@@ -99,9 +108,9 @@ class FraktGuide extends CarrierModule {
 	}
     }
 
-    private function createCarrier($config, $product_id) {
+    private function createCarrier($config, $product_id, $name) {
 	    $carrier = new Carrier();
-        $carrier->name = $product_id;
+        $carrier->name = $name;
         $carrier->id_tax_rules_group = $config['id_tax_rules_group'];
         $carrier->id_zone = $config['id_zone'];
         $carrier->url = $config['url'];
@@ -146,6 +155,10 @@ class FraktGuide extends CarrierModule {
             $rangeWeight->delimiter1 = '0';
             $rangeWeight->delimiter2 = '10000';
             $rangeWeight->add();
+
+	    if(!Db::getInstance()->Execute('INSERT INTO `'._DB_PREFIX_.'fraktguide_product_names`(`id_carrier`, `product_id`) VALUES('.$carrier->id.', \''.$product_id.'\')')) {
+		return false;
+	    }
 
 	    if (!copy(dirname(__FILE__) . '/img/logo.png', _PS_SHIP_IMG_DIR_ . '/' . $carrier->id . '.jpg'))
                 return false;
@@ -201,11 +214,11 @@ class FraktGuide extends CarrierModule {
 		$carriers = $carrier_ids ? explode(';', $carrier_ids) : array();
         $existing_carriers = array();
         if(count($carriers) > 0) {
-            $sql = 'SELECT id_carrier, name FROM `'._DB_PREFIX_.'carrier` WHERE id_carrier IN ('.implode(',', $carriers).')';
+            $sql = 'SELECT id_carrier, product_id FROM `'._DB_PREFIX_.'fraktguide_product_names` WHERE id_carrier IN ('.implode(',', $carriers).')';
             $result = Db::getInstance()->ExecuteS($sql);
             if($result) {
                 foreach($result as $row) {
-                    $existing_carriers[$row['name']] = $row['id_carrier'];
+                    $existing_carriers[$row['product_id']] = $row['id_carrier'];
                 }
             }
         }
@@ -217,7 +230,8 @@ class FraktGuide extends CarrierModule {
 		foreach($selected_products as $product) {
 			if(!array_key_exists($product, $carriers_by_name)) {
 				// Create the carrier
-				$this->createCarrier($this->_carrier_config, $product);
+				$name = Tools::getValue('product_'.$product.'_name');
+				$this->createCarrier($this->_carrier_config, $product, $name);
 			}
 		}
 	}
@@ -264,7 +278,7 @@ class FraktGuide extends CarrierModule {
 			$this->_html .= '<tr>
 				<td><label for="fraktguide_product_'.$id.'">'.$name.'</label></td>
 				<td>'.$desc.'</td>
-				<td><input type="checkbox" id="fraktguide_product_'.$id.'" name="fraktguide_product[]" value="'.$id.'"'.(in_array($id, $selected_products) ? ' checked' : '').'></td>
+				<td><input type="hidden" name="product_'.$id.'_name" value="'.$name.'"><input type="checkbox" id="fraktguide_product_'.$id.'" name="fraktguide_product[]" value="'.$id.'"'.(in_array($id, $selected_products) ? ' checked' : '').'></td>
 			</tr>';
 		}
 		$this->_html .= '</table>';
@@ -291,9 +305,9 @@ class FraktGuide extends CarrierModule {
     }
 
 	private function getProductForCarrier($carrier_id) {
-		$sql = "SELECT name FROM `"._DB_PREFIX_."carrier` WHERE `id_carrier` = ".$carrier_id;
+		$sql = "SELECT product_id FROM `"._DB_PREFIX_."fraktguide_product_names` WHERE `id_carrier` = ".$carrier_id;
 		$result = Db::getInstance()->ExecuteS($sql);
-		return $result[0]['name'];
+		return $result[0]['product_id'];
 	}
 
     public function hookProcessCarrier($params) {
