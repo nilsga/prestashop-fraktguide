@@ -12,7 +12,7 @@ class FraktGuide extends CarrierModule {
 		'range_behaviour' => 0,
 		'is_module' => true,
 		'id_zone' => 1,
-		'delay' => array('no' => 'Avhengig av postnummer', 'en' => 'Depdens on postal code'),
+		'delay' => array('no' => 'Avhengig av postnummer', 'en' => 'Depends on postal code'),
                 'shipping_external' => true,
 		'external_module_name' => 'fraktguide',
 		'need_range' => true
@@ -326,10 +326,6 @@ class FraktGuide extends CarrierModule {
         }
     }
 	
-    public function hookBeforeCarrier() {
-	return '';
-    }
-
     public function getShippingCost($cart) {
         $address = new Address((int)$cart->id_address_delivery);
         $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
@@ -359,6 +355,24 @@ class FraktGuide extends CarrierModule {
 
     public function getOrderShippingCost($params, $shipping_cost) {
 	return $this->getShippingCost($params); 
+    }
+
+    public function getOrderShippingDelay($cart) {
+	$address = new Address((int)$cart->id_address_delivery);
+        $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
+        $product_id = $this->getProductForCarrier($this->id_carrier);
+        $forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
+        $url = "http://fraktguide.bring.no/fraktguide/products/$product_id/expectedDelivery.json?from=".Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER')."&to=$address->postcode&weightInGrams=$weight&edi=".(Configuration::get('FRAKTGUIDE_EDI') ? 'true' : 'false');
+        $http = curl_init();
+        curl_setopt($http, CURLOPT_URL, $url);
+        curl_setopt($http, CURLOPT_POST, false);
+        curl_setopt($http, CURLOPT_RETURNTRANSFER, true);
+        $fraktguide_json = curl_exec($http);
+        $json_obj = json_decode($fraktguide_json, true);
+        $status = curl_getinfo($http, CURLINFO_HTTP_CODE);
+        curl_close($http);
+	$expected_delivery = $json_obj["Product"]["ExpectedDelivery"]["WorkingDays"];
+	return sprintf("%d arbeidsdag(er)", $expected_delivery);
     }
 
     public function getOrderShippingCostExternal($cart) {
