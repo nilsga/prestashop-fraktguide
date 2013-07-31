@@ -57,6 +57,7 @@
 
 			<div class="margin-form">
 				<input type="checkbox" name="fraktguide_product[]" value="{$product_id}" {if in_array($product_id, $fraktguide_selected_products)}checked{/if}>
+				<input type="hidden" name="fraktguide_product_{$product_id}_name" value="{$name}">
 			</div>
 
 			<div class="margin-form">

@@ -229,7 +229,7 @@ class FraktGuide extends CarrierModule {
 		foreach($selected_products as $product) {
 			if(!array_key_exists($product, $carriers_by_name)) {
 				// Create the carrier
-				$name = Tools::getValue('product_'.$product.'_name');
+				$name = Tools::getValue('fraktguide_product_'.$product.'_name');
 				$this->createCarrier($this->_carrier_config, $product, $name);
 			}
 		}
