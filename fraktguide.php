@@ -27,6 +27,7 @@ class FraktGuide extends CarrierModule {
         $this->tab = 'shipping_logistics';
         $this->version = '0.10.1';
         $this->author = 'Nils-Helge Garli Hegvik';
+	$this->module_key = '5191156334d29ca0c5d3f70c80e8ba38';
         parent::__construct();
 
         $this->displayName = $this->l('Bring Fraktguide');
