@@ -25,7 +25,7 @@ class FraktGuide extends CarrierModule {
     function __construct() {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
-        $this->version = '0.10';
+        $this->version = '0.10.1';
         $this->author = 'Nils-Helge Garli Hegvik';
         parent::__construct();
 
@@ -40,17 +40,9 @@ class FraktGuide extends CarrierModule {
     	if(!$this->registerHook('extraCarrier') || !$this->registerHook('processCarrier') || !$this->registerHook('beforeCarrier')) {
       		return false;
     	}
-        //foreach($this->_products as $product_id => $product_name) {
-        //    if(!$this->createCarrier($this->_carrier_config, $product_id, $product_name)) {
-	    //	return false;
-        //    }
-        //}
         if(!$this->createDatabaseTable()) {
            return false;
         } 
-        //Configuration::updateValue('FRAKTGUIDE_SERVICEPAKKE', true);
-        //Configuration::updateValue('FRAKTGUIDE_PA_DOREN', true);
-        //Configuration::updateValue('FRAKTGUIDE_NORGESPAKKE', false);
         Configuration::updateValue('FRAKTGUIDE_EDI', true);
 	    Configuration::updateValue('FRAKTGUIDE_FORSIKRING', true);
     	Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', '');
@@ -58,6 +50,7 @@ class FraktGuide extends CarrierModule {
 	    Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', '');
 	    Configuration::updateValue('FRAKTGUIDE_PRODUCTS', 'SERVICEPAKKE');
 	    Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', null);
+	    Configuration::updateValue('FRAKTGUIDE_DEBUG', false);
 	    return true;
     }
 
@@ -173,19 +166,24 @@ class FraktGuide extends CarrierModule {
     public function getContent() {
        if(Tools::isSubmit('submit')) {
           $edi = Tools::getIsset('fraktguide_edi');
-          $forsikring = Tools::getIsset('fraktguide_forsikring');
-          $frapostnr = Tools::getValue('fraktguide_fra_postnummer');
+          $forsikring = Tools::getIsset('fraktguide_insurance');
+          $frapostnr = Tools::getValue('fraktguide_postal_code');
           $selected_products = Tools::getIsset('fraktguide_product') ? Tools::getValue('fraktguide_product') : array();
-          $max_price = Tools::getValue('fraktguide_a_post_max_pris');
+          $max_price = Tools::getValue('fraktguide_a_post_max_price');
+		$debug_mode = Tools::getIsset('fraktguide_debug_mode');
           Configuration::updateValue('FRAKTGUIDE_EDI', $edi);
           Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
           Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
           Configuration::updateValue('FRAKTGUIDE_PRODUCTS', implode(';', $selected_products));
           Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
+		Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', $debug_mode);
           $this->createCarriers($selected_products);
           $this->updateSelectedCarriers($selected_products);
+	$this->_displayForm(true);
        }
-       $this->_displayForm();
+	else {
+       		$this->_displayForm(false);
+	}
        return $this->_html;
     }
 
@@ -242,66 +240,74 @@ class FraktGuide extends CarrierModule {
         	curl_setopt($http, CURLOPT_POST, false);
         	curl_setopt($http, CURLOPT_RETURNTRANSFER, true);
         	$raw_json = curl_exec($http);
-        	$json_obj = json_decode($raw_json, true);
-        	$status = curl_getinfo($http, CURLINFO_HTTP_CODE);
-        	curl_close($http);
-		return $json_obj;
+		$status = curl_getinfo($http, CURLINFO_HTTP_CODE);
+		curl_close($http);
+		if($status == 200) {
+        		return json_decode($raw_json, true);
+         	}
+		else {
+			return false;
+		}		
 	}
 
-    private function _displayForm() {
+    private function _displayForm($updated) {
 	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
-        $edi = Configuration::get('FRAKTGUIDE_EDI');
+    $edi = Configuration::get('FRAKTGUIDE_EDI');
 	$frapostnr = Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER');
 	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
 	$selected_products = $products_str ? explode(';', $products_str) : array();
 	$max_price = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRICE');
-	$this->_html .= '<style>
-		.fraktguide_product {
-			clear: both;
-		}		
-	</style>';
-	$this->_html .= '<form action="'.$_SERVER['REQUEST_URI'].'" method="POST">';
+    	$debug_mode = Configuration::get('FRAKTGUIDE_DEBUG_MODE');
+	$debug_info = array();
+        $products = array();
+        $product_descriptions = array();
+        $error = null;
+	if($debug_mode) {
+		array_push($debug_info, "Starting display of configuration");
+	}	
 
-	if($frapostnr) {
+    if($frapostnr) {
 		$url = 'http://fraktguide.bring.no/fraktguide/products/all.json?from='.$frapostnr.'&to=0185&weightInGrams=1000&edi='.($edi ? 'true' : 'false');
-		$this->_html .= '<table id="fraktguide_products">
-			<tr>
-				<th>Navn</th>
-				<th>Beskrivelse</th>
-				<th>Aktiver</th>
-			</tr>';
-		$products = $this->getJson($url);
-		foreach($products["Product"] as $product) {
-			$id = $product["ProductId"];
-			$name = $product["GuiInformation"]["ProductName"];
-			$desc = $product["GuiInformation"]["HelpText"];
-			$this->_html .= '<tr>
-				<td><label for="fraktguide_product_'.$id.'">'.$name.'</label></td>
-				<td>'.$desc.'</td>
-				<td><input type="hidden" name="product_'.$id.'_name" value="'.$name.'"><input type="checkbox" id="fraktguide_product_'.$id.'" name="fraktguide_product[]" value="'.$id.'"'.(in_array($id, $selected_products) ? ' checked' : '').'></td>
-			</tr>';
+		if($debug_mode) {
+			array_push($debug_info, "Requesting url: ".$url);
 		}
-		$this->_html .= '</table>';
+		$json_products = $this->getJson($url);
+		if($debug_mode) {
+			array_push($debug_info, "JSON response: ".print_r($json_products, true));
+		}
+		if($json_products) {
+			foreach($json_products["Product"] as $json_product) {
+            
+				$id = $json_product["ProductId"];
+				$name = $json_product["GuiInformation"]["ProductName"];
+				$desc = $json_product["GuiInformation"]["HelpText"];
+            
+            			$products[$id] = $name;
+            			$product_descriptions[$id] = $desc;
+			}
+			if($debug_mode) {
+				array_push($debug_info, "Products: ".print_r($products, true));
+				array_push($debug_info, "Product descriptions: ".print_r($product_descriptions, true));
+			}
+		}
+		else {
+			$error = $this->l("Feil ved uthenting av produkter");
+		}
 	}
-
-	$this->_html .= '
-		<div style="clear: both;">
-               <span><label for="fraktguide_edi">'.$this->l('Bruk EDI').'</label></span><span><input type="checkbox" id="fraktguide_edi" name="fraktguide_edi" value="true"'.($edi ? ' checked' : '').'></span>
-             </div>
-	     <div style="clear: both;">
-		<span><label for="fraktguide_forsikring">'.$this->l('Forsikring').'</label></span><span><input type="checkbox" id="fraktguide_forsikring" name="fraktguide_forsikring" value="true"'.($forsikring ? ' checked' : '').'></span>
-	     </div>    
-	     <div style="clear: both";>
-		<span><label for="fraktguide_fra_postnummer">'.$this->l('Fra postnummer').'</label></span><span><input type="text" id="fraktguide_fra_postnummer" name="fraktguide_fra_postnummer" value="'.$frapostnr.'"></span>
-	     </div>
-	     <div style="clear: both";>
-                <span><label for="fraktguide_a_post_max_pris">'.$this->l('Maks ordrepris for A-post').'</label></span><input type="text" id="fraktguide_a_post_max_pris" name="fraktguide_a_post_max_pris" value="'.$max_price.'"></span>
-             </div>
-	     <div style="clear: both; ">
-         	<input type="submit" name="submit" value="'.$this->l('Oppdater').'">
-        	</div>  
-	 </form>
-        ';
+        $this->context->smarty->assign(array(
+					'error' => $error,
+					'updated' => $updated,
+                                            'fraktguide_edi' => $edi,
+                                            'fraktguide_a_post_max_price' => $max_price,
+                                            'fraktguide_insurance' => $forsikring,
+                                            'fraktguide_postal_code' => $frapostnr,
+                                            'fraktguide_products' => $products,
+                                            'fraktguide_product_descriptions' => $product_descriptions,
+					'fraktguide_selected_products' => $selected_products,
+					'fraktguide_debug_mode' => $debug_mode,
+					'fraktguide_debug_info' => $debug_info					    
+        ));
+        $this->_html = $this->display(__FILE__, "templates/config.tpl");
     }
 
 	private function getProductForCarrier($carrier_id) {
