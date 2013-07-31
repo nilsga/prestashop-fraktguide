@@ -235,12 +235,15 @@ class FraktGuide extends CarrierModule {
 		}
 	}
 
-	private function getJson($url) {
+	private function getJson($url, $debug_mode = false, $debug_info = null) {
 		$http = curl_init();
         	curl_setopt($http, CURLOPT_URL, $url);
         	curl_setopt($http, CURLOPT_POST, false);
         	curl_setopt($http, CURLOPT_RETURNTRANSFER, true);
         	$raw_json = curl_exec($http);
+		if($debug_mode) {
+			array_push($debug_info, "Response from service: ".$raw_json);
+		}
 		$status = curl_getinfo($http, CURLINFO_HTTP_CODE);
 		curl_close($http);
 		if($status == 200) {
@@ -272,7 +275,7 @@ class FraktGuide extends CarrierModule {
 		if($debug_mode) {
 			array_push($debug_info, "Requesting url: ".$url);
 		}
-		$json_products = $this->getJson($url);
+		$json_products = $this->getJson($url, $debug_mode, &$debug_info);
 		if($debug_mode) {
 			array_push($debug_info, "JSON response: ".print_r($json_products, true));
 		}
