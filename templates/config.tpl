@@ -24,7 +24,7 @@
 
 		<label for="fraktguide_edi">{l s="Bruk EDI" mod="fraktguide"}</label>
 		<div class="margin-form">
-			<input type="checkbox" id="fraktguide_edi" name="fraktguide_edi" value="true" {if $edi}checked{/if}>
+			<input type="checkbox" id="fraktguide_edi" name="fraktguide_edi" value="true" {if $fraktguide_edi}checked{/if}>
 		</div>
 		
 		<label for="fraktguide_insurance">{l s="Bruk forsikring" mod="fraktguide"}</label>

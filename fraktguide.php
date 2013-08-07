@@ -25,7 +25,7 @@ class FraktGuide extends CarrierModule {
     function __construct() {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
-        $this->version = '0.10.2';
+        $this->version = '0.10.3';
         $this->author = 'Nils-Helge Garli Hegvik';
 	$this->module_key = '5191156334d29ca0c5d3f70c80e8ba38';
         parent::__construct();
@@ -38,52 +38,25 @@ class FraktGuide extends CarrierModule {
     	if(!parent::install()) {
 	        return false;
 	    }
-    	if(!$this->registerHook('extraCarrier') || !$this->registerHook('processCarrier') || !$this->registerHook('beforeCarrier')) {
+    	if(!$this->registerHook('actionCarrierUpdate')) {
       		return false;
     	}
-        if(!$this->createDatabaseTable()) {
-           return false;
-        } 
+	if(!$this->createDatabaseTable()) {
+		return false;
+	}
         Configuration::updateValue('FRAKTGUIDE_EDI', true);
 	    Configuration::updateValue('FRAKTGUIDE_FORSIKRING', true);
     	Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', '');
 	    Configuration::updateValue('FRAKTGUIDE_CARRIER_IDS', '');
 	    Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', '');
 	    Configuration::updateValue('FRAKTGUIDE_PRODUCTS', 'SERVICEPAKKE');
-	    Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', null);
-	    Configuration::updateValue('FRAKTGUIDE_DEBUG', false);
+	    Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', '');
+	    Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', false);
 	    return true;
     }
 
-    private function createDatabaseTable() {
-	$sql = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'fraktguide_cart_cache` (
-                                  `id_cart` int(10) NOT NULL,
-                                  `id_customer` int(10) NOT NULL,
-                                  `shipping_cost` double(10,2) NOT NULL,
-                                  PRIMARY KEY  (`id_cart`,`id_customer`)
-                                ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
-                
-        if (!Db::getInstance()->Execute($sql)) {
-            return false;
-	}
-	else {
-	    $sql = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'fraktguide_product_names` (
-				`id_carrier` varchar(255) NOT NULL,
-				`product_id` varchar(255) NOT NULL,
-				PRIMARY KEY (`id_carrier`)
-		   ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
-	    if(!Db::getInstance()->Execute($sql)) {
-		return false;
-	    }
-	}
-	return true;
-    }
-
     public function uninstall() {
-	if(!parent::uninstall() OR !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'fraktguide_cart_cache`')
-		OR !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'fraktguide_product_names`')
-		OR !$this->unregisterHook('extraCarrier')
- 		OR !$this->unregisterHook('processCarrier')) {
+	if(!parent::uninstall() OR !$this->unregisterHook('actionCarrierUpdate') OR !Db::getInstance()->Execute('DROP TABLE IF EXISTS `'._DB_PREFIX_.'fraktguide_product_names`')) {
 		return false;
 	}
 	else {
@@ -98,14 +71,31 @@ class FraktGuide extends CarrierModule {
 		}
 		Configuration::deleteByName('FRAKTGUIDE_CREATED_CARRIER_IDS');
                 Configuration::deleteByName('FRAKTGUIDE_CARRIER_IDS');
+		Configuration::deleteByName('FRAKTGUIDE_PRODUCTS');
+		Configuration::deleteByName('FRAKTGUIDE_EDI');
+		Configuration::deleteByName('FRAKTGUIDE_DEBUG_MODE');
+		Configuration::deleteByName('FRAKTGUIDE_A_POST_MAX_PRIS');
+		Configuration::deleteByName('FRAKTGUIDE_FRA_POSTNUMMER');
+		Configuration::deleteByName('FRAKTGUIDE_FORSIKRING');
 		return true;
 	}
     }
 
-    private function createCarrier($config, $product_id, $name) {
+	private function createDatabaseTable() {
+		$sql = 'CREATE TABLE IF NOT EXISTS `'._DB_PREFIX_.'fraktguide_product_names` (
+				`id_carrier` varchar(255) NOT NULL,
+				`product_id` varchar(255) NOT NULL,
+				PRIMARY KEY (`id_carrier`)
+		   ) ENGINE='._MYSQL_ENGINE_.' DEFAULT CHARSET=utf8;';
+	    	return Db::getInstance()->Execute($sql);
+    	}
+
+    private function createCarrier($config, $product_id, $name, $debug_mode = false, $debug_info = array()) {
 	    $carrier = new Carrier();
+	if($debug_mode) {
+		array_push($debug_info, "Trying to create carrier ".$product_id." with name ".$name);
+	}
         $carrier->name = $name;
-        $carrier->id_tax_rules_group = $config['id_tax_rules_group'];
         $carrier->id_zone = $config['id_zone'];
         $carrier->url = $config['url'];
         $carrier->active = $config['active'];
@@ -123,7 +113,13 @@ class FraktGuide extends CarrierModule {
 	        if ($language['iso_code'] == 'no')
                 $carrier->delay[$language['id_lang']] = $config['delay'][$language['iso_code']];
 	    }
+	if($debug_mode) {
+		array_push($debug_info, "Adding carrier");
+	}
         if($carrier->add()) {
+	   	if($debug_mode) {
+			array_push($debug_info, "Carrier added, setting up associations");
+		}
 	    $carriers_str = Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS');
 	    $carriers = $carriers_str ? explode(';', Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS')) : array();
 	    $carriers[] = $carrier->id;
@@ -149,61 +145,78 @@ class FraktGuide extends CarrierModule {
             $rangeWeight->delimiter1 = '0';
             $rangeWeight->delimiter2 = '10000';
             $rangeWeight->add();
-
-	    if(!Db::getInstance()->Execute('INSERT INTO `'._DB_PREFIX_.'fraktguide_product_names`(`id_carrier`, `product_id`) VALUES('.$carrier->id.', \''.$product_id.'\')')) {
-		return false;
-	    }
+	    if($debug_mode) {
+		array_push($debug_info, "Trying to update product name table");
+		}
+		if(!Db::getInstance()->Execute('INSERT INTO `'._DB_PREFIX_.'fraktguide_product_names`(`id_carrier`, `product_id`) VALUES('.$carrier->id.', \''.$product_id.'\')')) {
+			return false;
+	    	}
 
 	    if (!copy(dirname(__FILE__) . '/img/logo.png', _PS_SHIP_IMG_DIR_ . '/' . $carrier->id . '.jpg'))
                 return false;
-	
+		if($debug_mode) {
+			array_push($debug_info, "Success");
+		}	
             return true;
         }
         else {
+	    Tools::dieOrLog("Error creating carrier ".$product_id);
 	    return false;
         }
     }
 
-    public function getContent() {
-       if(Tools::isSubmit('submit')) {
-          $edi = Tools::getIsset('fraktguide_edi');
-          $forsikring = Tools::getIsset('fraktguide_insurance');
-          $frapostnr = Tools::getValue('fraktguide_postal_code');
-          $selected_products = Tools::getIsset('fraktguide_product') ? Tools::getValue('fraktguide_product') : array();
-          $max_price = Tools::getValue('fraktguide_a_post_max_price');
-		$debug_mode = Tools::getIsset('fraktguide_debug_mode');
-          Configuration::updateValue('FRAKTGUIDE_EDI', $edi);
-          Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
-          Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
-          Configuration::updateValue('FRAKTGUIDE_PRODUCTS', implode(';', $selected_products));
-          Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
-		Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', $debug_mode);
-          $this->createCarriers($selected_products);
-          $this->updateSelectedCarriers($selected_products);
-	$this->_displayForm(true);
-       }
-	else {
-       		$this->_displayForm(false);
-	}
-       return $this->_html;
-    }
+	public function getContent() {
+       		if(Tools::isSubmit('submit')) {
+          		$edi = Tools::getIsset('fraktguide_edi');
+          		$forsikring = Tools::getIsset('fraktguide_insurance');
+          		$frapostnr = Tools::getValue('fraktguide_postal_code');
+          		$selected_products = Tools::getIsset('fraktguide_product') ? Tools::getValue('fraktguide_product') : array();
+          		$max_price = Tools::getValue('fraktguide_a_post_max_price');
+			$debug_mode = Tools::getIsset('fraktguide_debug_mode');
+         		Configuration::updateValue('FRAKTGUIDE_EDI', $edi);
+          		Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
+          		Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
+          		Configuration::updateValue('FRAKTGUIDE_PRODUCTS', implode(';', $selected_products));
+          		Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
+			Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', $debug_mode);
+			$debug_info = array();
+          		$this->createCarriers($selected_products, $debug_mode, &$debug_info);
+          		$this->updateSelectedCarriers($selected_products, $debug_mode, &$debug_info);
+			$this->_displayForm(true, $debug_mode, &$debug_info);
+       		}
+		else {
+       			$this->_displayForm(false, Configuration::get('FRAKTGUIDE_DEBUG_MODE'));
+		}
+       		return $this->_html;
+    	}
 
-
-	private function updateSelectedCarriers($selected_products) {
+	private function updateSelectedCarriers($selected_products, $debug_mode = false, $debug_info = array()) {
 		$carriers_by_name = $this->getCarriersByName();
+		if($debug_mode) {
+			array_push($debug_info, "Carriers by name: ".print_r($carriers_by_name, true));
+		}
 		$ids = array();
 		foreach($carriers_by_name as $carrier_name => $carrier_id) {
 			if(in_array($carrier_name, $selected_products)) {
+				if($debug_mode) {
+					array_push($debug_info, "Carrier ".$carrier_name." (".$carrier_id.") selected. Enabling");
+				}
 				// Set active
-				$update_values = array('id_carrier' => (int)$carrier_id, 'active' => true);
-				Db::getInstance()->autoExecute(_DB_PREFIX_.'carrier', $update_values, 'UPDATE', '`id_carrier` = '.(int)$carrier_id);
+				$update_values = array('active' => 1);
+				Db::getInstance()->update('carrier', $update_values, '`id_carrier` = '.(int)$carrier_id);
 				$ids[] = $carrier_id;
 			}
 			else {
 				// Set disabled
-				$update_values = array('active' => false);
-				Db::getInstance()->autoExecute(_DB_PREFIX_.'carrier', $update_values, 'UPDATE', '`id_carrier` = '.(int)$carrier_id);
+				if($debug_info) {
+					array_push($debug_info, "Carrier ".$carrier_name." (".$carrier_id.") not selected. Disabling");
+				}
+				$update_values = array('active' => 0);
+				Db::getInstance()->update('carrier', $update_values, '`id_carrier` = '.(int)$carrier_id);
 			}
+		}
+		if($debug_mode) {
+			array_push($debug_info, "New list of selected carriers: ".print_r($ids, true));
 		}
 		Configuration::updateValue('FRAKTGUIDE_CARRIER_IDS', implode(';', $ids));
 	}
@@ -223,14 +236,20 @@ class FraktGuide extends CarrierModule {
         }
 		return $existing_carriers;
 	}
-	
-	private function createCarriers($selected_products) {
+
+	private function createCarriers($selected_products, $debug_mode = false, $debug_info = array()) {
 		$carriers_by_name = $this->getCarriersByName();
+		if($debug_mode) {
+			array_push($debug_info, "Carriers by name: ".print_r($carriers_by_name, true));
+		}
 		foreach($selected_products as $product) {
 			if(!array_key_exists($product, $carriers_by_name)) {
 				// Create the carrier
+				if($debug_mode) {
+					array_push($debug_info, "Carrier ".$product." does not exist. Creating");
+				}
 				$name = Tools::getValue('fraktguide_product_'.$product.'_name');
-				$this->createCarrier($this->_carrier_config, $product, $name);
+				$this->createCarrier($this->_carrier_config, $product, $name, $debug_mode, &$debug_info);
 			}
 		}
 	}
@@ -254,15 +273,13 @@ class FraktGuide extends CarrierModule {
 		}		
 	}
 
-    private function _displayForm($updated) {
+    private function _displayForm($updated, $debug_mode = false, $debug_info = array()) {
 	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
     $edi = Configuration::get('FRAKTGUIDE_EDI');
 	$frapostnr = Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER');
 	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
 	$selected_products = $products_str ? explode(';', $products_str) : array();
-	$max_price = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRICE');
-    	$debug_mode = Configuration::get('FRAKTGUIDE_DEBUG_MODE');
-	$debug_info = array();
+	$max_price = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRIS');
         $products = array();
         $product_descriptions = array();
         $error = null;
@@ -320,23 +337,7 @@ class FraktGuide extends CarrierModule {
 		return $result[0]['product_id'];
 	}
 
-    public function hookProcessCarrier($params) {
-        $cart = $params["cart"];
-	if(in_array($cart->id_carrier, split(";", Configuration::get('FRAKTGUIDE_CARRIER_IDS')))) {
-                $cust_id = $cart->id_customer;
-                $shipping_cost = $this->getShippingCost($cart);
-                $update_values = array("id_cart" => (int)$cart->id, "id_customer" => (int)$cust_id, "shipping_cost" => floatval($shipping_cost));
-                $row = Db::getInstance()->getRow('SELECT * FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cust_id);
-                if($row) {
-                        Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'UPDATE', 'id_cart = ' . (int)$cart->id);
-                }
-                else {
-                       Db::getInstance()->autoExecute(_DB_PREFIX_.'fraktguide_cart_cache', $update_values, 'INSERT');
-                }
-        }
-    }
-	
-    public function getShippingCost($cart) {
+    public function getOrderShippingCost($cart, $shipping_cost) {
         $address = new Address((int)$cart->id_address_delivery);
         $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
         $product_id = $this->getProductForCarrier($this->id_carrier);
@@ -363,10 +364,6 @@ class FraktGuide extends CarrierModule {
             return false; // Indicates that carrier is not available due to size/weight restrictions
     }
 
-    public function getOrderShippingCost($params, $shipping_cost) {
-	return $this->getShippingCost($params); 
-    }
-
     public function getOrderShippingDelay($cart) {
 	$address = new Address((int)$cart->id_address_delivery);
         $weight = $cart->getTotalWeight() * 1000 > 0.0 ? $cart->getTotalWeight() * 1000 : 5000;
@@ -385,11 +382,34 @@ class FraktGuide extends CarrierModule {
 	return sprintf("%d arbeidsdag(er)", $expected_delivery);
     }
 
-    public function getOrderShippingCostExternal($cart) {
-	$shipping_cost = Db::getInstance()->getValue('SELECT shipping_cost FROM `'._DB_PREFIX_.'fraktguide_cart_cache` WHERE `id_cart` = '.(int)$cart->id.' AND `id_customer` = '.(int)$cart->id_customer);
-	if(!$shipping_cost) $shipping_cost = $this->getShippingCost($cart);
-	return $shipping_cost;
-    }
+	public function hookActionCarrierUpdate($params) {
+		$carrier_ids = explode(';', Configuration::get('FRAKTGUIDE_CARRIER_IDS'));
+		$created_carrier_ids = explode(';', Configuration::get('FRAKTGUIDE_CREATED_CARRIER_IDS'));
+		$old_id = $params['id_carrier'];
+		if(in_array($old_id, $carrier_ids) || in_array($old_id, $created_carrier_ids)) {
+			$new_carrier = $params['carrier'];
+			for($i = 0; $i < count($carrier_ids); $i++) {
+				if($carrier_ids[$i] == $old_id) {
+					$carrier_ids[$i] = $new_carrier->id;
+				}
+			}
+			for($j = 0; $i < count($created_carrier_ids); $j++) {
+				if($created_carrier_ids[$j] == $old_id) {
+					$created_carrier_ids[$j] = $new_carrier->id;
+				}
+			}
+			Configuration::updateValue('FRAKTGUIDE_CARRIER_IDS', implode(';', $carrier_ids));
+			Configuration::updateValue('FRAKTGUIDE_CREATED_CARRIER_IDS', implode(';', $created_carrier_ids));
+			$sql = "UPDATE `'._DB_PREFIX_.'fraktguide_product_names` SET `id_carrier` = ".$new_carrier->id." WHERE `id_carrier` = ".$old_id;
+			Db::getInstance()->Execute($sql); 
+		}
+		
+	}
+
+	public function getOrderShippingCostExternal($params) {
+		return $this->getOrderShippingCost($params, 0);
+	}
+
 }
 
 ?>
