@@ -7,7 +7,7 @@
 {/if}
 
 {if !$fraktguide_postal_code}
-	<div class="warn">{l s="Ingen produkter vil v√re tilgjengelig inntil postnummer er konfigurert" mod="fraktguide"}</div>
+	<div class="warn">{l s="Ingen produkter vil v√¶re tilgjengelig inntil postnummer er konfigurert" mod="fraktguide"}</div>
 {/if}
 
 <h2>{l s="Bring Fraktguide" mod="booking"}</h2>
