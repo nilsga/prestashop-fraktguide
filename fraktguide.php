@@ -25,7 +25,7 @@ class FraktGuide extends CarrierModule {
     function __construct() {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
-        $this->version = '0.10.5';
+        $this->version = '0.10.6';
         $this->author = 'Nils-Helge Garli Hegvik';
 	$this->module_key = '5191156334d29ca0c5d3f70c80e8ba38';
         parent::__construct();
@@ -90,7 +90,7 @@ class FraktGuide extends CarrierModule {
 	    	return Db::getInstance()->Execute($sql);
     	}
 
-    private function createCarrier($config, $product_id, $name, $debug_mode = false, $debug_info = array()) {
+    private function createCarrier($config, $product_id, $name, $debug_mode = false, &$debug_info = array()) {
 	    $carrier = new Carrier();
 	if($debug_mode) {
 		array_push($debug_info, "Trying to create carrier ".$product_id." with name ".$name);
@@ -180,9 +180,9 @@ class FraktGuide extends CarrierModule {
           		Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
 			Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', $debug_mode);
 			$debug_info = array();
-          		$this->createCarriers($selected_products, $debug_mode, &$debug_info);
-          		$this->updateSelectedCarriers($selected_products, $debug_mode, &$debug_info);
-			$this->_displayForm(true, $debug_mode, &$debug_info);
+          		$this->createCarriers($selected_products, $debug_mode, $debug_info);
+          		$this->updateSelectedCarriers($selected_products, $debug_mode, $debug_info);
+			$this->_displayForm(true, $debug_mode, $debug_info);
        		}
 		else {
        			$this->_displayForm(false, Configuration::get('FRAKTGUIDE_DEBUG_MODE'));
@@ -190,7 +190,7 @@ class FraktGuide extends CarrierModule {
        		return $this->_html;
     	}
 
-	private function updateSelectedCarriers($selected_products, $debug_mode = false, $debug_info = array()) {
+	private function updateSelectedCarriers($selected_products, $debug_mode = false, &$debug_info = array()) {
 		$carriers_by_name = $this->getCarriersByName();
 		if($debug_mode) {
 			array_push($debug_info, "Carriers by name: ".print_r($carriers_by_name, true));
@@ -208,7 +208,7 @@ class FraktGuide extends CarrierModule {
 			}
 			else {
 				// Set disabled
-				if($debug_info) {
+				if($debug_mode) {
 					array_push($debug_info, "Carrier ".$carrier_name." (".$carrier_id.") not selected. Disabling");
 				}
 				$update_values = array('active' => 0);
@@ -237,7 +237,7 @@ class FraktGuide extends CarrierModule {
 		return $existing_carriers;
 	}
 
-	private function createCarriers($selected_products, $debug_mode = false, $debug_info = array()) {
+	private function createCarriers($selected_products, $debug_mode = false, &$debug_info = array()) {
 		$carriers_by_name = $this->getCarriersByName();
 		if($debug_mode) {
 			array_push($debug_info, "Carriers by name: ".print_r($carriers_by_name, true));
@@ -249,12 +249,12 @@ class FraktGuide extends CarrierModule {
 					array_push($debug_info, "Carrier ".$product." does not exist. Creating");
 				}
 				$name = Tools::getValue('fraktguide_product_'.$product.'_name');
-				$this->createCarrier($this->_carrier_config, $product, $name, $debug_mode, &$debug_info);
+				$this->createCarrier($this->_carrier_config, $product, $name, $debug_mode, $debug_info);
 			}
 		}
 	}
 
-	private function getJson($url, $debug_mode = false, $debug_info = null) {
+	private function getJson($url, $debug_mode = false, &$debug_info = array()) {
 		$http = curl_init();
         	curl_setopt($http, CURLOPT_URL, $url);
         	curl_setopt($http, CURLOPT_POST, false);
@@ -273,7 +273,7 @@ class FraktGuide extends CarrierModule {
 		}		
 	}
 
-    private function _displayForm($updated, $debug_mode = false, $debug_info = array()) {
+    private function _displayForm($updated, $debug_mode = false, &$debug_info = array()) {
 	$forsikring = Configuration::get('FRAKTGUIDE_FORSIKRING');
     $edi = Configuration::get('FRAKTGUIDE_EDI');
 	$frapostnr = Configuration::get('FRAKTGUIDE_FRA_POSTNUMMER');
@@ -292,7 +292,7 @@ class FraktGuide extends CarrierModule {
 		if($debug_mode) {
 			array_push($debug_info, "Requesting url: ".$url);
 		}
-		$json_products = $this->getJson($url, $debug_mode, &$debug_info);
+		$json_products = $this->getJson($url, $debug_mode, $debug_info);
 		if($debug_mode) {
 			array_push($debug_info, "JSON response: ".print_r($json_products, true));
 		}
