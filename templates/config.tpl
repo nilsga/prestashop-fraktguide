@@ -36,6 +36,11 @@
                 <div class="margin-form">
                         <input type="text" id="fraktguide_a_post_max_price" name="fraktguide_a_post_max_price" value="{$fraktguide_a_post_max_price}">
                 </div>
+		
+		<label for="fraktguide_id_tax_rules_group">{l s="Momsgruppe" mod="fraktguide"}</label>
+		<div class="margin-form">
+			{html_options name="fraktguide_id_tax_rules_group" options=$fraktguide_tax_groups selected=$fraktguide_id_tax_rules_group}
+		</div>
 
 		<label for="fraktguide_debug_mode">{l s="Vis debuginfo" mod="fraktguide"}</label>
 		<div class="margin-form">

@@ -25,7 +25,7 @@ class FraktGuide extends CarrierModule {
     function __construct() {
         $this->name = 'fraktguide';
         $this->tab = 'shipping_logistics';
-        $this->version = '0.10.6';
+        $this->version = '0.10.7';
         $this->author = 'Nils-Helge Garli Hegvik';
 	$this->module_key = '5191156334d29ca0c5d3f70c80e8ba38';
         parent::__construct();
@@ -52,6 +52,7 @@ class FraktGuide extends CarrierModule {
 	    Configuration::updateValue('FRAKTGUIDE_PRODUCTS', 'SERVICEPAKKE');
 	    Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', '');
 	    Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', false);
+	    Configuration::updateValue('FRAKTGUIDE_ID_TAX_RULES_GROUP', 1);
 	    return true;
     }
 
@@ -77,6 +78,7 @@ class FraktGuide extends CarrierModule {
 		Configuration::deleteByName('FRAKTGUIDE_A_POST_MAX_PRIS');
 		Configuration::deleteByName('FRAKTGUIDE_FRA_POSTNUMMER');
 		Configuration::deleteByName('FRAKTGUIDE_FORSIKRING');
+		Configuration::deleteByName('FRAKTGUIDE_ID_TAX_RULES_GROUP');
 		return true;
 	}
     }
@@ -106,7 +108,7 @@ class FraktGuide extends CarrierModule {
         $carrier->shipping_external = $config['shipping_external'];
         $carrier->external_module_name = $config['external_module_name'];
         $carrier->need_range = $config['need_range'];
-	    $languages = Language::getLanguages(true);
+	$languages = Language::getLanguages(true);
         foreach ($languages as $language) {   
             if ($language['iso_code'] == 'en')
                 $carrier->delay[$language['id_lang']] = $config['delay'][$language['iso_code']];
@@ -157,6 +159,15 @@ class FraktGuide extends CarrierModule {
 		if($debug_mode) {
 			array_push($debug_info, "Success");
 		}	
+
+	    // Link to correct tax group (ps_carrier_tax_rules_group_shop aparently...)
+	    if(!Db::getInstance()->insert('carrier_tax_rules_group_shop', array(
+		'id_carrier' => $carrier->id,
+		'id_tax_rules_group' => Configuration::get('FRAKTGUIDE_ID_TAX_RULES_GROUP'),
+		'id_shop' => Context::getContext()->shop->id
+	    ))) {
+		return false;
+	    }
             return true;
         }
         else {
@@ -173,12 +184,14 @@ class FraktGuide extends CarrierModule {
           		$selected_products = Tools::getIsset('fraktguide_product') ? Tools::getValue('fraktguide_product') : array();
           		$max_price = Tools::getValue('fraktguide_a_post_max_price');
 			$debug_mode = Tools::getIsset('fraktguide_debug_mode');
+			$tax_rules_group = Tools::getValue('fraktguide_id_tax_rules_group');
          		Configuration::updateValue('FRAKTGUIDE_EDI', $edi);
           		Configuration::updateValue('FRAKTGUIDE_FORSIKRING', $forsikring);
           		Configuration::updateValue('FRAKTGUIDE_FRA_POSTNUMMER', $frapostnr);
           		Configuration::updateValue('FRAKTGUIDE_PRODUCTS', implode(';', $selected_products));
           		Configuration::updateValue('FRAKTGUIDE_A_POST_MAX_PRIS', $max_price);
 			Configuration::updateValue('FRAKTGUIDE_DEBUG_MODE', $debug_mode);
+			Configuration::updateValue('FRAKTGUIDE_ID_TAX_RULES_GROUP', $tax_rules_group);
 			$debug_info = array();
           		$this->createCarriers($selected_products, $debug_mode, $debug_info);
           		$this->updateSelectedCarriers($selected_products, $debug_mode, $debug_info);
@@ -280,6 +293,7 @@ class FraktGuide extends CarrierModule {
 	$products_str = Configuration::get('FRAKTGUIDE_PRODUCTS');
 	$selected_products = $products_str ? explode(';', $products_str) : array();
 	$max_price = Configuration::get('FRAKTGUIDE_A_POST_MAX_PRIS');
+	$id_tax_rules_group = Configuration::get('FRAKTGUIDE_ID_TAX_RULES_GROUP');
         $products = array();
         $product_descriptions = array();
         $error = null;
@@ -315,6 +329,11 @@ class FraktGuide extends CarrierModule {
 			$error = $this->l("Feil ved uthenting av produkter");
 		}
 	}
+
+	$tax_rules_groups = array();
+	foreach(TaxRulesGroup::getTaxRulesGroups(true) as $tax_rule) {
+		$tax_rules_groups[$tax_rule['id_tax_rules_group']] = $tax_rule['name'];
+	}
         $this->context->smarty->assign(array(
 					'error' => $error,
 					'updated' => $updated,
@@ -326,7 +345,9 @@ class FraktGuide extends CarrierModule {
                                             'fraktguide_product_descriptions' => $product_descriptions,
 					'fraktguide_selected_products' => $selected_products,
 					'fraktguide_debug_mode' => $debug_mode,
-					'fraktguide_debug_info' => $debug_info					    
+					'fraktguide_debug_info' => $debug_info,
+					'fraktguide_id_tax_rules_group' => $id_tax_rules_group,
+					'fraktguide_tax_groups' => $tax_rules_groups
         ));
         $this->_html = $this->display(__FILE__, "templates/config.tpl");
     }
